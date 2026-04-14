@@ -66,6 +66,7 @@ export async function parseMessage(
 
   const userMessage = `${contextBlock}\nMensaje actual: "${message}"`;
 
+  logger.info({ message, contextLength: recentContext.length }, "Calling OpenAI parser");
   try {
     const response = await getClient().chat.completions.create({
       model: "gpt-4o-mini",
@@ -95,7 +96,7 @@ export async function parseMessage(
     logger.info({ intent: parsed.data.intent, confidence: parsed.data.confidence }, "Message parsed");
     return parsed.data;
   } catch (err) {
-    logger.error({ err }, "OpenAI parse error");
+    logger.error({ err, message: (err as Error).message, stack: (err as Error).stack }, "OpenAI parse error");
     return null;
   }
 }
