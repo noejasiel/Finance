@@ -9,7 +9,8 @@ services:
       pnpm install --frozen-lockfile &&
       pnpm --filter @finance/shared build &&
       pnpm --filter @finance/backend db:generate &&
-      pnpm --filter @finance/backend build
+      pnpm --filter @finance/backend build &&
+      PUPPETEER_CACHE_DIR=/opt/render/project/src/.cache/puppeteer npx puppeteer browsers install chrome
     startCommand: node apps/backend/dist/index.js
     healthCheckPath: /health
     envVars:
@@ -19,16 +20,20 @@ services:
         value: "3001"
       - key: DATABASE_URL
         sync: false
-      - key: ANTHROPIC_API_KEY
+      - key: OPENAI_API_KEY
         sync: false
       - key: SESSION_SECRET
-        generateValue: true
+        sync: false
       - key: INTERNAL_API_TOKEN
-        generateValue: true
+        sync: false
       - key: APP_URL
         sync: false
       - key: WA_AUTH_STRATEGY
-        value: remote
+        value: local
+      - key: WA_ALLOWED_IDS
+        value: ""
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/src/.cache/puppeteer
 
   - type: web
     name: finance-web
