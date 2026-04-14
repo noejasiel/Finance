@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users ─────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  timezone  String   @default("America/Mexico_City")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+  messages     ConversationMessage[]
+  alertRules   AlertRule[]
+  alertEvents  AlertEvent[]
+  challenges   LoginChallenge[]
+
+  @@map("users")
+}
+
+// ── Transactions ──────────────────────────────────────────────────
+
+model Transaction {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  amountMinor     Int      @map("amount_minor")
+  currency        String   @default("MXN")
+  transactionType String   @map("transaction_type") // "expense" | "income"
+  category        String   @default("other")
+  description     String?
+  occurredAt      DateTime @default(now()) @map("occurred_at")
+  deletedAt       DateTime? @map("deleted_at") // soft delete
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, deletedAt, occurredAt])
+  @@map("transactions")
+}
+
+// ── Conversation Messages ─────────────────────────────────────────
+
+model ConversationMessage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  role        String   // "user" | "assistant"
+  content     String
+  parseResult Json?    @map("parse_result")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("conversation_messages")
+}
+
+// ── Alert Rules ───────────────────────────────────────────────────
+
+model AlertRule {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  type           String   // "category_limit" | "negative_balance" | "unusual_expense" | "weekly_summary"
+  enabled        Boolean  @default(true)
+  category       String?
+  thresholdMinor Int?     @map("threshold_minor")
+  dayOfWeek      Int?     @map("day_of_week") // 0=Sunday .. 6=Saturday
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user   User         @relation(fields: [userId], references: [id])
+  events AlertEvent[]
+
+  @@unique([userId, type, category])
+  @@map("alert_rules")
+}
+
+// ── Alert Events ──────────────────────────────────────────────────
+
+model AlertEvent {
+  id      String   @id @default(cuid())
+  userId  String   @map("user_id")
+  ruleId  String   @map("rule_id")
+  message String
+  sentAt  DateTime @default(now()) @map("sent_at")
+
+  user User      @relation(fields: [userId], references: [id])
+  rule AlertRule @relation(fields: [ruleId], references: [id])
+
+  @@index([userId, sentAt])
+  @@map("alert_events")
+}
+
+// ── Login Challenges (OTP) ────────────────────────────────────────
+
+model LoginChallenge {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([phone, code, expiresAt])
+  @@map("login_challenges")
+}
+
+// ── WhatsApp Sessions (RemoteAuth) ────────────────────────────────
+
+model WaSession {
+  id        String   @id @default(cuid())
+  sessionId String   @unique @map("session_id")
+  data      String   @db.Text // base64 encoded session snapshot
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wa_sessions")
+}

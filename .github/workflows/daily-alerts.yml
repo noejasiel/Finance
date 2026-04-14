@@ -1,0 +1,30 @@
+name: Daily Alerts & Weekly Summary
+
+on:
+  schedule:
+    # Run daily at 9:00 AM Mexico City time (15:00 UTC)
+    - cron: "0 15 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run alerts
+        run: |
+          curl -s -X POST \
+            "${{ secrets.API_URL }}/api/v1/internal/run-alerts" \
+            -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
+            -H "Content-Type: application/json"
+
+  weekly-summary:
+    runs-on: ubuntu-latest
+    # Only run on Sundays
+    if: github.event.schedule == '0 15 * * 0' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Send weekly summaries
+        run: |
+          curl -s -X POST \
+            "${{ secrets.API_URL }}/api/v1/internal/weekly-summary" \
+            -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
+            -H "Content-Type: application/json"

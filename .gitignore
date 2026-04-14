@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Prisma
+apps/backend/prisma/*.db
+apps/backend/prisma/*.db-journal
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# WhatsApp session (local only)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Agent/sync files
+AGENT.md
+CLAUDE.md
+.agent/
+.agent-mem/
+.agents/
+.brainsync/
+.windsurfrules
+.cursor/
+.cursorrules
+.clineRules
+.cline/
+.gemini/
+
+# Auto-generated agent rules
+.brainsync/agent-rules.md

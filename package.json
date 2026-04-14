@@ -1,0 +1,19 @@
+{
+  "name": "finance-whatsapp",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev:backend": "pnpm --filter @finance/backend dev",
+    "dev:web": "pnpm --filter @finance/web dev",
+    "build": "pnpm -r build",
+    "build:backend": "pnpm --filter @finance/backend build",
+    "build:web": "pnpm --filter @finance/web build",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @finance/backend db:generate",
+    "db:migrate": "pnpm --filter @finance/backend db:migrate",
+    "db:push": "pnpm --filter @finance/backend db:push"
+  }
+}

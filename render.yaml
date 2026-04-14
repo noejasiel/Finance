@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: finance-backend
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      npm install -g pnpm &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @finance/shared build &&
+      pnpm --filter @finance/backend db:generate &&
+      pnpm --filter @finance/backend build
+    startCommand: node apps/backend/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: WA_AUTH_STRATEGY
+        value: remote
+
+  - type: web
+    name: finance-web
+    runtime: static
+    buildCommand: |
+      npm install -g pnpm &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @finance/shared build &&
+      pnpm --filter @finance/web build
+    staticPublishPath: apps/web/out
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
