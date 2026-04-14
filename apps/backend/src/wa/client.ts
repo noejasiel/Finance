@@ -27,6 +27,11 @@ import {
 } from "../services/transaction.js";
 
 let waClient: WAClient | null = null;
+let currentQr: string | null = null;
+
+export function getCurrentQr(): string | null {
+  return currentQr;
+}
 
 /**
  * Initialize the WhatsApp client.
@@ -63,10 +68,12 @@ export async function initWhatsApp(): Promise<WAClient> {
 
   waClient.on("qr", (qr) => {
     logger.info("QR code received — scan with WhatsApp");
+    currentQr = qr;
     qrcode.generate(qr, { small: true });
   });
 
   waClient.on("ready", () => {
+    currentQr = null;
     logger.info("WhatsApp client is ready");
   });
 
