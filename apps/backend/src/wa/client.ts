@@ -42,12 +42,6 @@ export async function initWhatsApp(): Promise<WAClient> {
   // Phase 0: only LocalAuth for dev. RemoteAuth with PgStore comes in Phase 1.
   const authStrategy = new LocalAuth();
 
-  // In production, use system Chrome. In dev, use puppeteer-managed Chrome.
-  const executablePath =
-    env().NODE_ENV === "production"
-      ? (process.env.CHROME_PATH ?? "/usr/bin/google-chrome-stable")
-      : undefined;
-
   waClient = new Client({
     authStrategy,
     webVersionCache: {
@@ -55,7 +49,6 @@ export async function initWhatsApp(): Promise<WAClient> {
     },
     puppeteer: {
       headless: true,
-      executablePath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
