@@ -44,7 +44,7 @@ async function main() {
   await prisma.$connect();
   logger.info("Database connected");
 
-  // Initialize WhatsApp (non-blocking — let it connect in the background)
+  // Initialize WhatsApp in the background (no Chrome needed — uses WebSocket)
   initWhatsApp().catch((err) => {
     logger.error({ err }, "WhatsApp initialization failed");
   });
