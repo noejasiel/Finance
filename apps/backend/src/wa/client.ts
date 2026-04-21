@@ -163,7 +163,14 @@ export async function initWhatsApp(): Promise<void> {
 
         if (loggedOut) {
           logger.info("Cleaning up session files after logout...");
-          fs.rmSync(authDir, { recursive: true, force: true });
+          try {
+            const files = fs.readdirSync(authDir);
+            for (const file of files) {
+              fs.rmSync(join(authDir, file), { recursive: true, force: true });
+            }
+          } catch (err) {
+            logger.error({ err }, "Failed to clear session directory");
+          }
         }
 
         logger.info("Reconnecting in 5s...");
