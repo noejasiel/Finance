@@ -1,4 +1,4 @@
-import makeWASocket, {
+import {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
@@ -6,9 +6,11 @@ import makeWASocket, {
   type WASocket,
   type proto,
 } from "@whiskeysockets/baileys";
+import makeWASocket from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
 import { join } from "path";
+import fs from "fs";
 import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/prisma.js";
@@ -158,6 +160,11 @@ export async function initWhatsApp(): Promise<void> {
         const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         logger.warn({ code, loggedOut }, "WhatsApp disconnected");
+
+        if (loggedOut) {
+          logger.info("Cleaning up session files after logout...");
+          fs.rmSync(authDir, { recursive: true, force: true });
+        }
 
         logger.info("Reconnecting in 5s...");
         setTimeout(connect, 5_000);
