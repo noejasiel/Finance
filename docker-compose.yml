@@ -27,6 +27,13 @@ services:
       target: web
     container_name: finance-web
     restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - BACKEND_URL=http://finance-backend:3001
+    expose:
+      - "3000"
     networks:
       - internal
       - proxy

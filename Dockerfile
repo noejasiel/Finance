@@ -50,10 +50,18 @@ EXPOSE 3001
 
 CMD ["node", "apps/backend/dist/index.js"]
 
-# ── Stage 3: Web static (nginx) ───────────────────────────────
-FROM nginx:alpine AS web
+# ── Stage 3: Web (Next.js standalone) ───────────────────────────
+FROM node:20-slim AS web
 
-COPY --from=builder /app/apps/web/out/ /usr/share/nginx/html/
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-EXPOSE 80
+# Copy the standalone output
+COPY --from=builder /app/apps/web/.next/standalone/ ./
+COPY --from=builder /app/apps/web/.next/static/ apps/web/.next/static/
+COPY --from=builder /app/apps/web/public/ apps/web/public/
+
+ENV NODE_ENV=production
+ENV PORT=3000
+EXPOSE 3000
+
+CMD ["node", "apps/web/server.js"]
