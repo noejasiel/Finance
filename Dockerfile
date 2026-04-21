@@ -43,7 +43,7 @@ COPY --from=builder /app/apps/backend/dist/ apps/backend/dist/
 COPY --from=builder /app/apps/backend/prisma/ apps/backend/prisma/
 
 # Re-generate Prisma client in prod image
-RUN cd apps/backend && npx prisma generate
+RUN cd apps/backend && npx prisma@6 generate
 
 ENV NODE_ENV=production
 EXPOSE 3001
