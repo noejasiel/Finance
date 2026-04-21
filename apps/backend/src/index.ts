@@ -11,6 +11,7 @@ import { transactionRoutes } from "./routes/transactions.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { alertRoutes } from "./routes/alerts.js";
 import { internalRoutes } from "./routes/internal.js";
+import { adminRoutes } from "./routes/admin.js";
 import { initWhatsApp } from "./wa/client.js";
 
 async function main() {
@@ -35,6 +36,7 @@ async function main() {
   await app.register(dashboardRoutes);
   await app.register(alertRoutes);
   await app.register(internalRoutes);
+  await app.register(adminRoutes);
 
   // Start server
   await app.listen({ port: config.PORT, host: "0.0.0.0" });

@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
+import { normalizePhoneNumber } from "../lib/phone.js";
 
 /**
  * Extract a normalized phone number from a WhatsApp ID.
@@ -8,17 +9,12 @@ import { logger } from "../lib/logger.js";
  */
 export function extractPhone(waId: string): string {
   const raw = waId.split("@")[0];
-  // If it looks like a phone number (all digits), prefix with +
-  if (/^\d+$/.test(raw) && raw.length >= 10) {
-    return `+${raw}`;
-  }
-  // LID format — store as-is for now
-  return raw;
+  return normalizePhoneNumber(raw);
 }
 
 /**
  * Find or create a user by their WhatsApp ID.
- * Returns the user record.
+ * Returns the user record including onboardingStep.
  */
 export async function findOrCreateUser(waId: string) {
   const phone = extractPhone(waId);
@@ -29,6 +25,16 @@ export async function findOrCreateUser(waId: string) {
     create: { phone },
   });
 
-  logger.debug({ userId: user.id, phone }, "User resolved");
+  logger.debug({ userId: user.id, phone, onboardingStep: user.onboardingStep }, "User resolved");
   return user;
+}
+
+/**
+ * Set the user's name and mark onboarding as done.
+ */
+export async function completeOnboarding(userId: string, name: string) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { name, onboardingStep: "done" },
+  });
 }

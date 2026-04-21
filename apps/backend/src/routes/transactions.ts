@@ -5,19 +5,14 @@ import {
   API_PREFIX,
 } from "@finance/shared";
 import { prisma } from "../lib/prisma.js";
-
-// Placeholder auth — will be replaced in Phase 4 with real session auth
-async function getUserId(_req: { headers: Record<string, string | string[] | undefined> }): Promise<string | null> {
-  // TODO: extract from session cookie
-  return null;
-}
+import { getAuthenticatedUserId } from "./auth.js";
 
 export async function transactionRoutes(app: FastifyInstance) {
   const prefix = `${API_PREFIX}/transactions`;
 
   // GET /api/v1/transactions
   app.get(prefix, async (req, reply) => {
-    const userId = await getUserId(req);
+    const userId = await getAuthenticatedUserId(req);
     if (!userId) {
       return reply.status(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "Not authenticated" } });
     }
@@ -62,7 +57,7 @@ export async function transactionRoutes(app: FastifyInstance) {
 
   // PATCH /api/v1/transactions/:id
   app.patch(`${prefix}/:id`, async (req, reply) => {
-    const userId = await getUserId(req);
+    const userId = await getAuthenticatedUserId(req);
     if (!userId) {
       return reply.status(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "Not authenticated" } });
     }
@@ -99,7 +94,7 @@ export async function transactionRoutes(app: FastifyInstance) {
 
   // DELETE /api/v1/transactions/:id (soft delete)
   app.delete(`${prefix}/:id`, async (req, reply) => {
-    const userId = await getUserId(req);
+    const userId = await getAuthenticatedUserId(req);
     if (!userId) {
       return reply.status(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "Not authenticated" } });
     }

@@ -1,13 +1,20 @@
 import { prisma } from "../lib/prisma.js";
 import type { ParseResult } from "@finance/shared";
 
-// ── Keyword detection ─────────────────────────────────────────────
+// Greetings: hola, hey, buenas, qué onda, emojis
+const GREETING_PATTERNS = /^(hola|hey|hi|buenas|buenos?\s*d[ií]as?|buenas?\s*tardes?|buenas?\s*noches?|qu[eé]\s*onda|qu[eé]\s*tal|que\s*tal|ola|saludos?|sup|wey|ey|epa|épale|\ud83d\udc4b|\ud83d\ude0a|\ud83d\ude4c)\b/i;
 
-const GREETING_PATTERNS = /^(hola|hey|hi|buenas|buenos?\s*d[ií]as?|buenas?\s*tardes?|buenas?\s*noches?|qu[eé]\s*onda|qué\s*tal|ola|saludos?|sup)\b/i;
-const HELP_PATTERNS = /^(ayuda|help|instrucciones|c[oó]mo\s*(funciona|te?\s*uso|va)|qu[eé]\s*(puedo|haces|sabes)|men[uú]|comandos|opciones|\?)\b/i;
-const SUMMARY_PATTERNS = /^(resumen|resume|mi\s*resumen|cu[aá]nto\s*(llevo|gast[eé]|gaste)|balance|estado)\b/i;
-const CONFIRM_YES = /^(s[ií]|si|sip|sep|ok|sale|va|arre|nel.*mentira|confirmed?|yes|y|👍|✅)\s*$/i;
-const CONFIRM_NO = /^(no|nel|nop|nope|cancel[ao]?|olvida|ya\s*no|n|👎|❌)\s*$/i;
+// Help: /ayuda, ayuda, menú, cómo funciona, qué puedes hacer
+const HELP_PATTERNS = /^\/?(?:ayuda|help|instrucciones|men[uú]|comandos|opciones)\b|(?:c[oó]mo\s+(?:funciona|te?\s*uso|te?\s*utilizo|te?\s*manejas?)|qu[eé]\s+(?:puedes?\s+hacer|haces?|sabes?|comandos?|puedo\s+hacer)|\?$)/i;
+
+// Summary: detects natural queries about spending/summary/balance — NO ^ anchor
+const SUMMARY_PATTERNS = /\b(resumen|resume|balance|estado\s+de\s+cuenta)\b|\bcu[áa]nto\s+(?:gast[eé]|llevo|tengo|he\s+gastado|gaste|ingres[eé])\b|\bqu[eé]\s+(?:gast[eé]|gastaste|compr[eé]|compré?|ingres[eé]|gastos\s+(?:hice|tuve|tengo))\b|\bmis\s+(?:gastos?|ingresos?|movimientos?)\b|\bc[oó]mo\s+(?:voy|estoy|va)\b|\bqué\s+(?:gast[eé]|compr[eé])\b/i;
+
+// Reset: borra, elimina, olvida, limpia, resetea, desde cero
+const RESET_PATTERNS = /\b(olvida(?:r)?|borra(?:r)?|elimina(?:r)?|resetea(?:r)?|limpia(?:r)?|reinicia(?:r)?|reset)\b|\bempec[eé]mos\s+de\s+(0|cero)\b|\bdesde\s+(0|cero)\b|\bcuenta\s+nueva\b|\bvolver\s+a\s+empezar\b|\bquiero\s+empezar\s+de\s+nuevo\b|\bborra(?:r)?\s+(?:todo|mis|el|la|los|esta|lo\s+de)\b|\blimpia(?:r)?\s+(?:todo|mis|el|la)\b/i;
+
+const CONFIRM_YES = /^(s[ií]|si|sip|sep|ok|sale|va|arre|nel.*mentira|confirmed?|yes|y|\ud83d\udc4d|\u2705)\s*$/i;
+const CONFIRM_NO = /^(no|nel|nop|nope|cancel[ao]?|ya\s*no|n|\ud83d\udc4e|\u274c)\s*$/i;
 
 // Income shortcut: "+300 nómina", "mas 200 pagina", "más 500 freelance", "ms 200"
 const INCOME_SHORTCUT = /^(?:\+|m[aá]+s?)\s*(\d[\d,.]*)\s*(.*)?$/i;
@@ -19,6 +26,7 @@ export type FlowIntent =
   | "income_shortcut"
   | "confirm_yes"
   | "confirm_no"
+  | "reset_request"
   | "transaction"
   | "unknown";
 
@@ -39,6 +47,7 @@ export function detectBasicIntent(text: string, hasPendingConfirmation = false):
   if (HELP_PATTERNS.test(trimmed)) return "help";
   if (SUMMARY_PATTERNS.test(trimmed)) return "summary_request";
   if (INCOME_SHORTCUT.test(trimmed)) return "income_shortcut";
+  if (RESET_PATTERNS.test(trimmed)) return "reset_request";
 
   // Everything else goes to AI parser
   return "transaction";
@@ -90,6 +99,8 @@ export function parseIncomeShortcut(text: string): ParseResult | null {
     description,
     occurred_at: null,
     needs_confirmation: false,
+    reset_timeframe: null,
+    reset_count: null,
     correction: null,
   };
 }
@@ -124,56 +135,70 @@ export function buildGreeting(isNewUser: boolean): string {
 
 export function buildHelp(): string {
   return [
-    "📋 *Esto es lo que puedo hacer:*",
+    "📋 *Guía de Comandos*",
     "",
-    "💰 *Registrar gastos*",
-    "  Escribe el gasto de forma natural:",
-    '  • "café 45"',
-    '  • "uber al trabajo 89"',
-    '  • "super 1200"',
-    '  • "gasté 350 en gasolina"',
+    "💰 *Registrar Movimientos*",
+    "  • Gasto: \"comida 150\", \"uber 85\", \"cine 200\"",
+    "  • Ingreso: \"+500 freelance\", \"mas 2000 nomina\"",
     "",
-    "📈 *Registrar ingresos*",
-    '  • "+500 freelance"',
-    '  • "mas 200 pagina"',
-    '  • "me pagaron 15000"',
-    '  • "cobré 8000"',
+    "🔄 *Correcciones*",
+    "  • \"borra el último\" (deshace el registro anterior)",
+    "  • \"en realidad fueron 100\" (corrige el monto)",
+    "  • \"eso fue un ingreso\" (corrige el tipo)",
     "",
-    "🔄 *Corregir el último registro*",
-    '  • "borra el último"',
-    '  • "eso fue un ingreso"',
-    '  • "en realidad fueron 500"',
+    "📊 *Consultas*",
+    "  • \"resumen\": Estado de cuenta del mes actual",
+    "  • \"balance\": Lo que te queda (ingresos - gastos)",
     "",
-    "📊 *Ver resumen del mes*",
-    '  • "resumen"',
-    '  • "cuánto llevo"',
-    '  • "balance"',
+    "🎯 *Presupuestos (Smart Budgets)*",
+    "  • \"mi presupuesto de comida es 5000\"",
+    "  • \"aviso de 2000 en entretenimiento\"",
+    "  _Te avisaré automáticamente al llegar al 80%_",
     "",
-    "💡 *Tips:*",
-    "  • No necesitas ser exacto — si no estás seguro del monto te preguntaré.",
-    "  • Detecto la categoría automáticamente (comida, transporte, etc).",
-    "  • También puedes ver y editar todo desde la web.",
+    "🧹 *Limpieza (Reset)*",
+    "  • \"olvida lo de hoy\"",
+    "  • \"borra esta semana\"",
+    "  • \"resetea el mes\"",
+    "  • \"empezar de cero\" (borra todo el historial)",
+    "",
+    "💡 *Tip:* No tienes que ser exacto, ¡entiendo lenguaje natural!",
   ].join("\n");
 }
 
-export async function buildMonthlySummary(userId: string): Promise<string> {
+export async function buildMonthlySummary(userId: string, period: "today" | "week" | "month" = "month"): Promise<string> {
   const now = new Date();
-  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  let start: Date;
+  let end: Date;
+  let periodLabel: string;
+
+  if (period === "today") {
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    periodLabel = "hoy";
+  } else if (period === "week") {
+    end = new Date();
+    start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - 7);
+    periodLabel = "esta semana";
+  } else {
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    periodLabel = now.toLocaleString("es-MX", { month: "long" });
+  }
 
   const transactions = await prisma.transaction.findMany({
     where: {
       userId,
       deletedAt: null,
-      occurredAt: { gte: startOfMonth, lt: endOfMonth },
+      occurredAt: { gte: start, lt: end },
     },
   });
 
   if (transactions.length === 0) {
     return [
-      "📊 *Resumen del mes*",
+      `📊 *Resumen de ${periodLabel}*`,
       "",
-      "No tienes movimientos registrados este mes.",
+      `No tienes movimientos registrados ${period === "today" ? "hoy" : `en ${periodLabel}`}.`,
       "",
       'Empieza registrando un gasto, por ejemplo: "café 45"',
     ].join("\n");
@@ -197,8 +222,6 @@ export async function buildMonthlySummary(userId: string): Promise<string> {
     .slice(0, 5)
     .map(([cat, total]) => `  • ${categoryLabel(cat)}: $${formatMoney(total)}`);
 
-  const monthName = now.toLocaleString("es-MX", { month: "long" });
-
   // Last 5 movements
   const recentTxs = [...transactions]
     .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
@@ -211,7 +234,7 @@ export async function buildMonthlySummary(userId: string): Promise<string> {
     });
 
   const lines = [
-    `📊 *Resumen de ${monthName}*`,
+    `📊 *Resumen de ${periodLabel}*`,
     "",
     `💸 Gastos: $${formatMoney(totalExpenses)}`,
     `💰 Ingresos: $${formatMoney(totalIncome)}`,

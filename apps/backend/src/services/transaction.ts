@@ -87,15 +87,16 @@ export async function checkCategoryAlerts(userId: string, category: string): Pro
     if (!rule.thresholdMinor) continue;
     const ratio = totalSpent / rule.thresholdMinor;
 
+    // Use specific thresholds (e.g. 0.8 to warn at 80%)
     for (const threshold of [...ALERT_THRESHOLDS].reverse()) {
       if (ratio >= threshold) {
-        const pct = Math.round(threshold * 100);
-        const icon = threshold >= 1.0 ? "🔴" : "⚠️";
+        const pct = Math.round(ratio * 100);
+        const icon = ratio >= 1.0 ? "🔴" : "⚠️";
         const label = CATEGORY_LABELS[category] || category;
         return [
           "",
-          `${icon} *Alerta: ${label}*`,
-          `Llevas $${formatMoney(totalSpent)} de $${formatMoney(rule.thresholdMinor)} (${pct}%)`,
+          `${icon} *Alerta de Presupuesto: ${label}*`,
+          `Llevas $${formatMoney(totalSpent)} de los $${formatMoney(rule.thresholdMinor)} que tenías planeado (${pct}%)`,
         ].join("\n");
       }
     }
@@ -106,27 +107,51 @@ export async function checkCategoryAlerts(userId: string, category: string): Pro
 
 /**
  * Build the WhatsApp confirmation message after saving a transaction.
+ * Uses consistent format per plan: icon, separator, amount, category + description, monthly total.
  */
-export function buildTransactionConfirmation(parsed: ParseResult): string {
+export function buildTransactionConfirmation(parsed: ParseResult, monthlyTotal?: number): string {
   const isIncome = parsed.transaction_type === "income";
   const icon = isIncome ? "💰" : "💸";
-  const typeLabel = isIncome ? "Ingreso" : "Gasto";
-  const category = CATEGORY_LABELS[parsed.category || "other"] || parsed.category;
+  const typeLabel = isIncome ? "Ingreso registrado" : "Gasto registrado";
+  const catLabel = CATEGORY_LABELS[parsed.category || "other"] || parsed.category;
+  const desc = parsed.description ? `  ·  ${parsed.description}` : "";
 
   const lines = [
-    `${icon} *${typeLabel} registrado*`,
-    "",
-    `  Monto: $${formatMoney(parsed.amount_minor!)} ${parsed.currency}`,
-    `  Categoría: ${category}`,
+    `${icon} ${typeLabel}`,
+    "━━━━━━━━━━━━━━━━━━━━",
+    `  $${formatMoney(parsed.amount_minor!)} ${parsed.currency}`,
+    `  ${catLabel}${desc}`,
   ];
 
-  if (parsed.description) {
-    lines.push(`  Descripción: ${parsed.description}`);
+  if (monthlyTotal !== undefined) {
+    const totalLabel = isIncome ? "ingresos" : "gastos";
+    lines.push("", `📊 Este mes: $${formatMoney(monthlyTotal)} en ${totalLabel}`);
   }
 
   lines.push("", '_Escribe "borra el último" para deshacer._');
 
   return lines.join("\n");
+}
+
+/**
+ * Get the month-to-date total for a user by transaction type.
+ */
+export async function getMonthlyTotal(userId: string, transactionType: string): Promise<number> {
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+  const result = await prisma.transaction.aggregate({
+    where: {
+      userId,
+      transactionType,
+      deletedAt: null,
+      occurredAt: { gte: startOfMonth, lt: endOfMonth },
+    },
+    _sum: { amountMinor: true },
+  });
+
+  return result._sum.amountMinor || 0;
 }
 
 /**
@@ -238,4 +263,238 @@ export async function correctLastTransaction(
  */
 export function needsConfirmation(parsed: ParseResult): boolean {
   return parsed.needs_confirmation || parsed.confidence < CONFIDENCE_THRESHOLD;
+}
+
+// ── Reset transactions by timeframe ───────────────────────────────
+
+export type ResetTimeframe = "day" | "week" | "15days" | "month" | "all";
+
+const TIMEFRAME_LABELS: Record<ResetTimeframe, string> = {
+  day: "solo los registrados el día de hoy",
+  week: "los de esta semana en curso",
+  "15days": "los registrados en los últimos 15 días",
+  month: "todos los del mes actual completo",
+  all: "tu historial completo desde el primer día",
+};
+
+function getTimeframeDate(timeframe: ResetTimeframe): Date | null {
+  const now = new Date();
+  switch (timeframe) {
+    case "day":
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    case "week": {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - 7);
+      return d;
+    }
+    case "15days": {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - 15);
+      return d;
+    }
+    case "month":
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    case "all":
+      return null; // no lower bound
+  }
+}
+
+/**
+ * Soft-delete all transactions for a user within a timeframe OR the last N records.
+ * Returns the count of affected records.
+ */
+export async function resetTransactions(
+  userId: string,
+  timeframe: ResetTimeframe,
+  count?: number | null
+): Promise<number> {
+  // Count-based: delete the last N transactions by id
+  if (count && count > 0) {
+    const txs = await prisma.transaction.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: count,
+      select: { id: true },
+    });
+
+    if (txs.length === 0) return 0;
+
+    const result = await prisma.transaction.updateMany({
+      where: { id: { in: txs.map(t => t.id) } },
+      data: { deletedAt: new Date() },
+    });
+
+    logger.info({ userId, count, deleted: result.count }, "Transactions reset by count");
+    return result.count;
+  }
+
+  // Timeframe-based: delete all within the period
+  const since = getTimeframeDate(timeframe);
+
+  const where: Record<string, unknown> = {
+    userId,
+    deletedAt: null,
+  };
+
+  if (since) {
+    where.occurredAt = { gte: since };
+  }
+
+  const result = await prisma.transaction.updateMany({
+    where,
+    data: { deletedAt: new Date() },
+  });
+
+  logger.info({ userId, timeframe, count: result.count }, "Transactions reset");
+  return result.count;
+}
+
+/**
+ * Fetch a preview of transactions that will be deleted.
+ */
+export async function getTransactionsForResetPreview(
+  userId: string,
+  timeframe: ResetTimeframe,
+  count?: number | null
+): Promise<{ list: string[]; count: number }> {
+  // Count-based preview
+  if (count && count > 0) {
+    const txs = await prisma.transaction.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: count,
+    });
+
+    const list = txs.map(tx => {
+      const d = new Date(tx.occurredAt);
+      const dateStr = d.toLocaleDateString("es-MX", { day: '2-digit', month: 'short' });
+      const catLabel = CATEGORY_LABELS[tx.category] || tx.category;
+      const name = tx.description ? tx.description : catLabel;
+      const isIncome = tx.transactionType === "income";
+      const sign = isIncome ? "+" : "-";
+      return `• ${dateStr} - ${name} - ${sign}$${formatMoney(tx.amountMinor)}`;
+    });
+
+    return { list, count: txs.length };
+  }
+
+  // Timeframe-based preview
+  const since = getTimeframeDate(timeframe);
+
+  const where: Record<string, unknown> = {
+    userId,
+    deletedAt: null,
+  };
+
+  if (since) {
+    where.occurredAt = { gte: since };
+  }
+
+  const txs = await prisma.transaction.findMany({
+    where,
+    orderBy: { occurredAt: "desc" },
+    take: 15,
+  });
+
+  const totalCount = await prisma.transaction.count({ where });
+
+  const list = txs.map(tx => {
+    const d = new Date(tx.occurredAt);
+    const dateStr = d.toLocaleDateString("es-MX", { day: '2-digit', month: 'short' });
+    const catLabel = CATEGORY_LABELS[tx.category] || tx.category;
+    const name = tx.description ? tx.description : catLabel;
+    const isIncome = tx.transactionType === "income";
+    const sign = isIncome ? "+" : "-";
+    return `• ${dateStr} - ${name} - ${sign}$${formatMoney(tx.amountMinor)}`;
+  });
+
+  return { list, count: totalCount };
+}
+
+/**
+ * Build the confirmation prompt before executing a reset, now showing data preview.
+ */
+export function buildResetConfirmation(
+  timeframe: ResetTimeframe,
+  previewList: string[],
+  totalCount: number,
+  count?: number | null
+): string {
+  if (totalCount === 0) {
+    return `📭 No tienes movimientos para borrar.`;
+  }
+
+  const actionLabel = count && count > 0
+    ? `los últimos *${count}* movimiento${count > 1 ? "s" : ""} (${totalCount} encontrado${totalCount > 1 ? "s" : ""})`
+    : `${TIMEFRAME_LABELS[timeframe]} (${totalCount} en total)`;
+
+  const lines = [
+    "⚠️ *¿Estás seguro?*",
+    "",
+    `Esta acción eliminará ${actionLabel}.`,
+    "",
+    ...previewList,
+  ];
+
+  if (totalCount > previewList.length) {
+    lines.push(`_... y ${totalCount - previewList.length} más_`);
+  }
+
+  lines.push("", "Responde *sí* para confirmar o *no* para cancelar.");
+  return lines.join("\n");
+}
+
+// ── Smart Budgets ─────────────────────────────────────────────────
+
+export async function setBudget(userId: string, category: string, amountMinor: number): Promise<string> {
+  await prisma.alertRule.upsert({
+    where: {
+      userId_type_category: {
+        userId,
+        type: "category_limit",
+        category
+      }
+    },
+    update: {
+      thresholdMinor: amountMinor,
+      enabled: true,
+    },
+    create: {
+      userId,
+      type: "category_limit",
+      category,
+      thresholdMinor: amountMinor,
+      enabled: true,
+    }
+  });
+
+  const label = CATEGORY_LABELS[category] || category;
+  return `✅ *Presupuesto guardado*\n\nTe avisaré cuando tus gastos mensuales en ${label} superen el 80% de $${formatMoney(amountMinor)}.`;
+}
+
+export function buildBudgetConfirmationRequest(amountMinor: number, category: string): string {
+  const label = CATEGORY_LABELS[category] || category;
+  return [
+    `¿Quieres establecer un presupuesto mensual de *$${formatMoney(amountMinor)}* para *${label}*?`,
+    "",
+    "Te avisaré automáticamente cuando estés por llegar al límite.",
+    "Responde *sí* para confirmarlo."
+  ].join("\n");
+}
+
+/**
+ * Build the result message after a reset is executed.
+ */
+export function buildResetResult(count: number, timeframe: ResetTimeframe): string {
+  const label = TIMEFRAME_LABELS[timeframe];
+  if (count === 0) {
+    return `📭 No había movimientos ${label} para borrar.`;
+  }
+  return [
+    "🧹 *Cuenta limpia*",
+    "",
+    `Se eliminaron *${count}* movimiento${count > 1 ? "s" : ""} ${label}.`,
+    "",
+    "Tu dashboard ya refleja los cambios. ¡Empezamos de cero! 💪",
+  ].join("\n");
 }

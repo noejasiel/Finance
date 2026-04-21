@@ -12,6 +12,10 @@ import type {
 export interface User {
   id: string;
   phone: string;
+  name: string | null;
+  email: string | null;
+  role: "user" | "admin";
+  onboarding_step: "name" | "done";
   timezone: string;
   created_at: string;
   updated_at: string;

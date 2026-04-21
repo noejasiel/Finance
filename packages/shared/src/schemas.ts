@@ -32,6 +32,7 @@ export const IntentSchema = z.enum([
   "log_transaction",
   "delete_last",
   "correct_last",
+  "reset_data",
   "monthly_summary",
   "category_summary",
   "set_alert",
@@ -52,6 +53,8 @@ export const ParseResultSchema = z.object({
   description: z.string().nullable(),
   occurred_at: z.string().datetime({ offset: true }).nullable(),
   needs_confirmation: z.boolean(),
+  reset_timeframe: z.enum(["day", "week", "15days", "month", "all"]).nullable().default(null),
+  reset_count: z.number().int().positive().nullable().default(null),
   correction: z
     .object({
       field: z.string(),

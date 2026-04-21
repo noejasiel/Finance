@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { API_PREFIX } from "@finance/shared";
 import { prisma } from "../lib/prisma.js";
+import { getAuthenticatedUserId } from "./auth.js";
 
 export async function dashboardRoutes(app: FastifyInstance) {
   // GET /api/v1/dashboard/month?month=2026-04
   app.get(`${API_PREFIX}/dashboard/month`, async (req, reply) => {
-    // TODO: extract userId from session
-    const userId: string | null = null;
+    const userId = await getAuthenticatedUserId(req);
     if (!userId) {
       return reply.status(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "Not authenticated" } });
     }
@@ -55,7 +55,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       .map(([category, total]) => ({ category, total }))
       .sort((a, b) => b.total - a.total);
 
-    // Weekly trend (week number within month)
+    // Weekly trend
     const weeklyMap = new Map<number, { expenses: number; income: number }>();
     for (const tx of currentTxs) {
       const day = new Date(tx.occurredAt).getUTCDate();

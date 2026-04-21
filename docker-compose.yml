@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    container_name: finance-backend
+    restart: always
+    env_file: .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - wa_sessions:/app/.wa-auth
+    networks:
+      - internal
+      - proxy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => { if (!r.ok) throw 1 })"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: web
+    container_name: finance-web
+    restart: always
+    networks:
+      - internal
+      - proxy
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  wa_sessions:
+
+networks:
+  internal:
+  proxy:
+    external: true
