@@ -159,10 +159,8 @@ export async function initWhatsApp(): Promise<void> {
         const loggedOut = code === DisconnectReason.loggedOut;
         logger.warn({ code, loggedOut }, "WhatsApp disconnected");
 
-        if (!loggedOut) {
-          logger.info("Reconnecting in 5s...");
-          setTimeout(connect, 5_000);
-        }
+        logger.info("Reconnecting in 5s...");
+        setTimeout(connect, 5_000);
       }
     });
 
