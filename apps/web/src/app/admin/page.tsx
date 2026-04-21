@@ -166,7 +166,7 @@ export default function AdminPage() {
               <Tooltip
                 cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1, strokeDasharray: "4 4" }}
                 contentStyle={{ backgroundColor: "#1c1b1b", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}
-                formatter={(val: number) => [`${val} mensajes`, "Volumen"]}
+                formatter={(val) => [`${val ?? 0} mensajes`, "Volumen"]}
                 labelFormatter={(label) => new Date(label).toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" })}
               />
               <XAxis 
