@@ -14,6 +14,8 @@ services:
     networks:
       - internal
       - proxy
+    ports:
+      - "3001:3001"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => { if (!r.ok) throw 1 })"]
       interval: 30s
@@ -32,11 +34,11 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - BACKEND_URL=http://finance-backend:3001
-    expose:
-      - "3000"
     networks:
       - internal
       - proxy
+    ports:
+      - "3000:3000"
     depends_on:
       backend:
         condition: service_healthy
