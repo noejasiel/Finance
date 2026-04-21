@@ -114,8 +114,6 @@ const silentLogger = pino({ level: "silent" });
 
 export async function initWhatsApp(): Promise<void> {
   const authDir = join(process.cwd(), ".wa-auth");
-  const { state, saveCreds } = await useMultiFileAuthState(authDir);
-
   const { version } = await fetchLatestBaileysVersion();
   logger.info({ version }, "Initializing WhatsApp (Baileys)");
 
@@ -131,76 +129,78 @@ export async function initWhatsApp(): Promise<void> {
   const RATE_LIMIT_MAX = 5;
 
   function connect() {
-    const sock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
-      },
-      printQRInTerminal: true,
-      logger: silentLogger,
-      browser: ["Finance Bot", "Chrome", "1.0.0"],
-    });
+    useMultiFileAuthState(authDir).then(({ state, saveCreds }) => {
+      const sock = makeWASocket({
+        version,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+        },
+        printQRInTerminal: true,
+        logger: silentLogger,
+        browser: ["Finance Bot", "Chrome", "1.0.0"],
+      });
 
-    waSocket = sock;
+      waSocket = sock;
 
-    sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
-      if (qr) {
-        currentQr = qr;
-        logger.info("QR code ready — visit /qr to scan");
-      }
+      sock.ev.on("creds.update", saveCreds);
 
-      if (connection === "open") {
-        currentQr = null;
-        logger.info("WhatsApp connected");
-      }
+      sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+          currentQr = qr;
+          logger.info("QR code ready — visit /qr to scan");
+        }
 
-      if (connection === "close") {
-        waSocket = null;
-        const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const loggedOut = code === DisconnectReason.loggedOut;
-        logger.warn({ code, loggedOut }, "WhatsApp disconnected");
+        if (connection === "open") {
+          currentQr = null;
+          logger.info("WhatsApp connected");
+        }
 
-        if (loggedOut) {
-          logger.info("Cleaning up session files after logout...");
-          try {
-            const files = fs.readdirSync(authDir);
-            for (const file of files) {
-              fs.rmSync(join(authDir, file), { recursive: true, force: true });
+        if (connection === "close") {
+          waSocket = null;
+          const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          const loggedOut = code === DisconnectReason.loggedOut;
+          logger.warn({ code, loggedOut }, "WhatsApp disconnected");
+
+          if (loggedOut) {
+            logger.info("Cleaning up session files after logout...");
+            try {
+              const files = fs.readdirSync(authDir);
+              for (const file of files) {
+                fs.rmSync(join(authDir, file), { recursive: true, force: true });
+              }
+            } catch (err) {
+              logger.error({ err }, "Failed to clear session directory");
             }
+          }
+
+          logger.info("Reconnecting in 5s...");
+          setTimeout(connect, 5_000);
+        }
+      });
+
+      sock.ev.on("messages.upsert", async ({ messages, type }) => {
+        if (type !== "notify") return;
+
+        for (const msg of messages) {
+          try {
+            const jid = msg.key.remoteJid;
+            if (!jid) continue;
+
+            await enqueueTask(jid, async () => {
+              await handleMessage(sock, msg, {
+                bootTimestamp,
+                allowedIds,
+                rateLimitMap,
+                RATE_LIMIT_WINDOW_MS,
+                RATE_LIMIT_MAX,
+              });
+            });
           } catch (err) {
-            logger.error({ err }, "Failed to clear session directory");
+            logger.error({ err }, "Error enqueuing message");
           }
         }
-
-        logger.info("Reconnecting in 5s...");
-        setTimeout(connect, 5_000);
-      }
-    });
-
-    sock.ev.on("creds.update", saveCreds);
-
-    sock.ev.on("messages.upsert", async ({ messages, type }) => {
-      if (type !== "notify") return;
-
-      for (const msg of messages) {
-        try {
-          const jid = msg.key.remoteJid;
-          if (!jid) continue;
-          
-          await enqueueTask(jid, async () => {
-            await handleMessage(sock, msg, {
-              bootTimestamp,
-              allowedIds,
-              rateLimitMap,
-              RATE_LIMIT_WINDOW_MS,
-              RATE_LIMIT_MAX,
-            });
-          });
-        } catch (err) {
-          logger.error({ err }, "Error enqueuing message");
-        }
-      }
+      });
     });
   }
 
