@@ -100,6 +100,7 @@ export function parseIncomeShortcut(text: string): ParseResult | null {
     occurred_at: null,
     needs_confirmation: false,
     reset_timeframe: null,
+    analyze_timeframe: null,
     reset_count: null,
     correction: null,
   };
