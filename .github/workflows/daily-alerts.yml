@@ -15,7 +15,10 @@ jobs:
           curl -s -X POST \
             "${{ secrets.API_URL }}/api/v1/internal/run-alerts" \
             -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
-            -H "Content-Type: application/json"
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --max-time 120 \
+            --retry 3
 
   weekly-summary:
     runs-on: ubuntu-latest
@@ -27,4 +30,7 @@ jobs:
           curl -s -X POST \
             "${{ secrets.API_URL }}/api/v1/internal/weekly-summary" \
             -H "x-internal-token: ${{ secrets.INTERNAL_API_TOKEN }}" \
-            -H "Content-Type: application/json"
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --max-time 120 \
+            --retry 3
