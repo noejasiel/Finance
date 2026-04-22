@@ -481,6 +481,13 @@ async function handleMessage(
         break;
       }
 
+      if (parsed.intent === "analyze_expenses") {
+        const timeframe = parsed.analyze_timeframe ?? "month";
+        const { buildExpensesAnalysis } = await import("../services/analysis.js");
+        reply = await buildExpensesAnalysis(user.id, timeframe);
+        break;
+      }
+
       reply = "No entendí tu mensaje. Escribe *ayuda* para ver lo que puedo hacer.";
       break;
     }

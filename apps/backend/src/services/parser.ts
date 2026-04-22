@@ -25,6 +25,12 @@ PRESUPUESTOS Y ALERTAS (Smart Budgets):
 - Intent: "set_alert" para frases como "mi presupuesto de X es Y".
 - Mapea lenguaje coloquial: "chelas" -> entertainment, "gasol" -> transport, "despensa" -> food/shopping.
 
+ANÁLISIS INTELIGENTE (Gastos Hormiga):
+- Intent: "analyze_expenses" si el usuario dice "analiza mis gastos", "busca gastos hormiga", "fugas de dinero", "en qué estoy gastando de más".
+- Si mencionan un PERIODO, pon analyze_timeframe. Ej: "analiza esta semana" -> "week", "mis gastos hormiga del mes" -> "month".
+- Si no mencionan periodo explícito, el valor por defecto debe ser "month".
+- Timeframes disponibles: "week", "15days", "month", "all".
+
 RESET / BORRADO:
 - Intent: "reset_data". SIEMPRE necesita confirmación.
 - Si el usuario menciona un NÚMERO de registros (ej: "borra los últimos 5", "elimina los últimos 3 movimientos"), pon reset_count = ese número y reset_timeframe = null.
@@ -38,7 +44,7 @@ RESET / BORRADO:
 
 Responde SOLO con JSON válido.
 {
-  "intent": "log_transaction" | "delete_last" | "correct_last" | "reset_data" | "set_alert" | "unknown",
+  "intent": "log_transaction" | "delete_last" | "correct_last" | "reset_data" | "set_alert" | "analyze_expenses" | "unknown",
   "confidence": 0.0-1.0,
   "amount_minor": number | null,
   "currency": "MXN" | "USD",
@@ -48,6 +54,7 @@ Responde SOLO con JSON válido.
   "occurred_at": string | null,
   "needs_confirmation": boolean,
   "reset_timeframe": "day" | "week" | "15days" | "month" | "all" | null,
+  "analyze_timeframe": "week" | "15days" | "month" | "all" | null,
   "reset_count": number | null,
   "correction": { "field": string, "new_value": string } | null
 }`;
